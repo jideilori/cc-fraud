@@ -1,0 +1,6 @@
+**/__init__.py/*
+**/__pycache__/*
+.ipynb_checkpoints
+.vscode
+/mlenv
+data/raw/creditcard.csv.zip
