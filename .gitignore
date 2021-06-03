@@ -4,3 +4,4 @@
 .vscode
 /mlenv
 data/raw/creditcard.csv.zip
+**/mlruns/*
