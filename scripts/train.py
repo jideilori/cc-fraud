@@ -28,22 +28,21 @@ data = pd.read_csv('./data/raw/creditcard.csv.zip')
 # Take out validation data
 train_data,val_df = strat_split(data,'Class',0.2,42)
 
-# Replacing outliers using median values in all columns expect amount and class
-final_df = train_data.copy()
-final_df = final_df.drop(['Class','Amount'],axis=1)
-final_df_cols = [i for i in final_df.columns]
-for i in final_df_cols:
-    low, upp = remove_outlier(final_df[f'{i}'])
-    final_df[f'{i}'] = np.where(final_df[f'{i}']>upp,
-                                   upp,final_df[f'{i}'])
-    final_df[f'{i}'] = np.where(final_df[f'{i}']<low ,
-                                   low,final_df[f'{i}'])
+# Replacing outliers using median values in all columns except amount and class
+train_data = train_data.drop(['Class','Amount'],axis=1)
+train_data_cols = [i for i in train_data.columns]
+for i in train_data_cols:
+    low, upp = remove_outlier(train_data[f'{i}'])
+    train_data[f'{i}'] = np.where(train_data[f'{i}']>upp,
+                                   upp,train_data[f'{i}'])
+    train_data[f'{i}'] = np.where(train_data[f'{i}']<low ,
+                                   low,train_data[f'{i}'])
 # Add back amount and class to dataframe
-final_df['Class'] = data['Class']
-final_df['Amount'] = data['Amount']
+train_data['Class'] = train_data['Class']
+train_data['Amount'] = train_data['Amount']
 
 # Split into train and test set
-train_data = final_df.reset_index(drop=True)
+train_data = train_data.reset_index(drop=True)
 train_df,test_df = strat_split(train_data,'Class',0.2,42)
 
 x_train = train_df.drop('Class',axis=1)
@@ -57,14 +56,14 @@ y_val = val_df['Class']
 
 
 
-# xgbclf=xgb.XGBClassifier(
-#     max_depth=8,
-#     learning_rate=0.05,
-#     use_label_encoder=False,
-#     random_state=11,
-#     eval_metric='mlogloss'
-#     )
-# xgbclf.fit(x_train, y_train)
+xgbclf=xgb.XGBClassifier(
+    max_depth=8,
+    learning_rate=0.05,
+    use_label_encoder=False,
+    random_state=11,
+    eval_metric='mlogloss'
+    )
+xgbclf.fit(x_train, y_train)
 
 
 # # Testing
@@ -89,57 +88,70 @@ y_val = val_df['Class']
 
 run_name ='xgb_fraud_clf'
 with mlflow.start_run(run_name=run_name) as run:
+#     # get current run and experiment id
+#     run_id = run.info.run_uuid
+#     experiment_id = run.info.experiment_id
 
-    # get current run and experiment id
-    run_id = run.info.run_uuid
-    experiment_id = run.info.experiment_id
+#     # train and predict
+#     xgbclf=xgb.XGBClassifier(max_depth=8,
+#                             learning_rate=0.01,
+#                             use_label_encoder=False)
+#     xgbclf.fit(x_train, y_train)
 
-    # train and predict
-    xgbclf=xgb.XGBClassifier(max_depth=8,learning_rate=0.01,use_label_encoder=False)
-    xgbclf.fit(x_train, y_train)
+#     # Testing
+#     y_pred = xgbclf.predict(x_test)
+#     # confusion_matrix = pd.crosstab(y_test, y_pred, rownames=['Actual'], colnames=['Predicted'])
+#     # print(confusion_matrix)
+#     # print(classification_report(y_test, y_pred))
+#     # print(recall_score(y_test,y_pred))
 
-    # Testing
-    y_pred = xgbclf.predict(x_test)
-    # confusion_matrix = pd.crosstab(y_test, y_pred, rownames=['Actual'], colnames=['Predicted'])
-    # print(confusion_matrix)
-    # print(classification_report(y_test, y_pred))
-    # print(recall_score(y_test,y_pred))
+#     # Log model and params using the MLflow sklearn APIs
+#     mlflow.sklearn.log_model(xgbclf, "xgb-classifier")
 
-    # Log model and params using the MLflow sklearn APIs
-    mlflow.sklearn.log_model(xgbclf, "xgb-classifier")
+#     precision = precision_score(y_test, y_pred)
+#     conf_matrix = confusion_matrix(y_test, y_pred)
+#     roc = roc_auc_score(y_test, y_pred)
 
-    # acc = accuracy_score(y_test, y_pred)
-    precision = precision_score(y_test, y_pred)
-    conf_matrix = confusion_matrix(y_test, y_pred)
+#     # confusion matrix values
+#     tp = conf_matrix[0][0]
+#     tn = conf_matrix[1][1]
+#     fp = conf_matrix[0][1]
+#     fn = conf_matrix[1][0]
 
-    roc = roc_auc_score(y_test, y_pred)
+#     # get classification metrics
+#     class_report = classification_report(y_test, y_pred, output_dict=True)
+#     recall_0 = class_report['0']['recall']
+#     f1_score_0 = class_report['0']['f1-score']
+#     recall_1 = class_report['1']['recall']
+#     f1_score_1 = class_report['1']['f1-score']
 
-    # confusion matrix values
-    tp = conf_matrix[0][0]
-    tn = conf_matrix[1][1]
-    fp = conf_matrix[0][1]
-    fn = conf_matrix[1][0]
+#     # log metrics in mlflow
+#     mlflow.log_metric("recall_0", recall_0)
+#     mlflow.log_metric("f1_score_0", f1_score_0)
+#     mlflow.log_metric("recall_1", recall_1)
+#     mlflow.log_metric("f1_score_1", f1_score_1)
+#     mlflow.log_metric("precision", precision)
+#     mlflow.log_metric("true_positive", tp)
+#     mlflow.log_metric("true_negative", tn)
+#     mlflow.log_metric("false_positive", fp)
+#     mlflow.log_metric("false_negative", fn)
+#     mlflow.log_metric("roc", roc)
 
-    # get classification metrics
-    class_report = classification_report(y_test, y_pred, output_dict=True)
-    recall_0 = class_report['0']['recall']
-    f1_score_0 = class_report['0']['f1-score']
-    recall_1 = class_report['1']['recall']
-    f1_score_1 = class_report['1']['f1-score']
+#     mlflow.log_params("max_depth",)
 
-    # log metrics in mlflow
-    # mlflow.log_metric("accuracy_score", acc)
-    mlflow.log_metric("recall_0", recall_0)
-    mlflow.log_metric("f1_score_0", f1_score_0)
-    mlflow.log_metric("recall_1", recall_1)
-    mlflow.log_metric("f1_score_1", f1_score_1)
-    mlflow.log_metric("precision", precision)
-    mlflow.log_metric("true_positive", tp)
-    mlflow.log_metric("true_negative", tn)
-    mlflow.log_metric("false_positive", fp)
-    mlflow.log_metric("false_negative", fn)
-   
-    mlflow.log_metric("roc", roc)
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     # create confusion matrix plot
     # plt_cm, fig_cm, ax_cm = utils.plot_confusion_matrix(y_test, y_pred, y_test,
