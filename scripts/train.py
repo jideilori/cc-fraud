@@ -7,7 +7,8 @@ from sklearn.metrics import classification_report,confusion_matrix
 from sklearn.metrics import roc_curve, auc, recall_score, precision_score,f1_score,roc_auc_score
 import xgboost as xgb
 import mlflow
-
+import joblib
+save_model = True
 def remove_outlier(col):
   sorted(col)
   Q1,Q3 = col.quantile([0.25,0.75])
@@ -26,24 +27,45 @@ def strat_split(df,target,test_size,seed):
 
 data = pd.read_csv('./data/raw/creditcard.csv.zip')
 # Take out validation data
-train_data,val_df = strat_split(data,'Class',0.2,42)
-
-# Replacing outliers using median values in all columns except amount and class
-train_data = train_data.drop(['Class','Amount'],axis=1)
-train_data_cols = [i for i in train_data.columns]
-for i in train_data_cols:
-    low, upp = remove_outlier(train_data[f'{i}'])
-    train_data[f'{i}'] = np.where(train_data[f'{i}']>upp,
-                                   upp,train_data[f'{i}'])
-    train_data[f'{i}'] = np.where(train_data[f'{i}']<low ,
-                                   low,train_data[f'{i}'])
-# Add back amount and class to dataframe
-train_data['Class'] = train_data['Class']
-train_data['Amount'] = train_data['Amount']
+train_data,val_df = strat_split(data,'Class',0.2,11)
 
 # Split into train and test set
 train_data = train_data.reset_index(drop=True)
-train_df,test_df = strat_split(train_data,'Class',0.2,42)
+
+
+def drop_cols(df):
+    df = df.drop(['Class','Amount'],axis=1)
+    return df
+
+# Replacing outliers using median values in all columns except amount and class
+def outlier_mean_remover(train_data):
+    train_data_cols = [i for i in train_data.columns]
+    for i in train_data_cols:
+        low, upp = remove_outlier(train_data[f'{i}'])
+        train_data[f'{i}'] = np.where(train_data[f'{i}']>upp,
+                                    upp,train_data[f'{i}'])
+        train_data[f'{i}'] = np.where(train_data[f'{i}']<low ,
+                                    low,train_data[f'{i}'])
+
+
+    return train_data
+
+def add_cols(final_df,df):
+     # Add back amount and class to dataframe
+    final_df['Amount'] = df['Amount']
+    final_df['Class'] = df['Class']
+    return final_df
+
+train_data = train_data.reset_index(drop=True)
+final_df = drop_cols(train_data)
+final_df =  outlier_mean_remover(final_df)
+train_data = add_cols(final_df,train_data)
+
+test_split_seed = 25
+test_split_ratio =0.2
+train_df,test_df = strat_split(train_data,'Class',test_split_ratio,test_split_seed)
+
+
 
 x_train = train_df.drop('Class',axis=1)
 y_train = train_df['Class']
@@ -54,92 +76,83 @@ y_test = test_df['Class']
 x_val = val_df.drop('Class',axis=1)
 y_val = val_df['Class']
 
-
-
-xgbclf=xgb.XGBClassifier(
-    max_depth=8,
-    learning_rate=0.05,
-    use_label_encoder=False,
-    random_state=11,
-    eval_metric='mlogloss'
-    )
-xgbclf.fit(x_train, y_train)
-
-
-# # Testing
-# print('---------------------------------------------------------------')
-# print('----------------------Testing---------------------------------')
-
-# y_pred = xgbclf.predict(x_test)
-# conf_matrix = pd.crosstab(y_test, y_pred, rownames=['Actual'], colnames=['Predicted'])
-# print(conf_matrix)
-# print(classification_report(y_test, y_pred))
-# print(recall_score(y_test,y_pred))
-
-# # Validation
-
-# print('-----------------------------------------------------------------')
-# print('----------------------Validation---------------------------------')
-# y_val_pred = xgbclf.predict(x_val)
-# val_conf_matrix = pd.crosstab(y_val, y_val_pred, rownames=['Actual'], colnames=['Predicted'])
-# print(val_conf_matrix)
-# print(classification_report(y_val, y_val_pred))
-# print(recall_score(y_val,y_val_pred))
-
 run_name ='xgb_fraud_clf'
 with mlflow.start_run(run_name=run_name) as run:
-#     # get current run and experiment id
-#     run_id = run.info.run_uuid
-#     experiment_id = run.info.experiment_id
+    # get current run and experiment id
+    run_id = run.info.run_uuid
+    experiment_id = run.info.experiment_id
 
-#     # train and predict
-#     xgbclf=xgb.XGBClassifier(max_depth=8,
-#                             learning_rate=0.01,
-#                             use_label_encoder=False)
-#     xgbclf.fit(x_train, y_train)
-
-#     # Testing
-#     y_pred = xgbclf.predict(x_test)
-#     # confusion_matrix = pd.crosstab(y_test, y_pred, rownames=['Actual'], colnames=['Predicted'])
-#     # print(confusion_matrix)
-#     # print(classification_report(y_test, y_pred))
-#     # print(recall_score(y_test,y_pred))
-
-#     # Log model and params using the MLflow sklearn APIs
-#     mlflow.sklearn.log_model(xgbclf, "xgb-classifier")
-
-#     precision = precision_score(y_test, y_pred)
-#     conf_matrix = confusion_matrix(y_test, y_pred)
-#     roc = roc_auc_score(y_test, y_pred)
-
-#     # confusion matrix values
-#     tp = conf_matrix[0][0]
-#     tn = conf_matrix[1][1]
-#     fp = conf_matrix[0][1]
-#     fn = conf_matrix[1][0]
-
-#     # get classification metrics
-#     class_report = classification_report(y_test, y_pred, output_dict=True)
-#     recall_0 = class_report['0']['recall']
-#     f1_score_0 = class_report['0']['f1-score']
-#     recall_1 = class_report['1']['recall']
-#     f1_score_1 = class_report['1']['f1-score']
-
-#     # log metrics in mlflow
-#     mlflow.log_metric("recall_0", recall_0)
-#     mlflow.log_metric("f1_score_0", f1_score_0)
-#     mlflow.log_metric("recall_1", recall_1)
-#     mlflow.log_metric("f1_score_1", f1_score_1)
-#     mlflow.log_metric("precision", precision)
-#     mlflow.log_metric("true_positive", tp)
-#     mlflow.log_metric("true_negative", tn)
-#     mlflow.log_metric("false_positive", fp)
-#     mlflow.log_metric("false_negative", fn)
-#     mlflow.log_metric("roc", roc)
-
-#     mlflow.log_params("max_depth",)
+    xgbclf=xgb.XGBClassifier(
+        max_depth=4,
+        random_state=42,
+        learning_rate=0.5,
+        n_estimators=200,
+        use_label_encoder=False,
+        eval_metric='mlogloss',
+        )
 
 
+    # train and predict
+    xgbclf.fit(x_train, y_train)
+    # Testing
+    print('---------------------------------------------------------------')
+    print('----------------------Testing---------------------------------')
+
+    y_pred = xgbclf.predict(x_test)
+    test_conf_matrix = pd.crosstab(y_test, y_pred, rownames=['Actual'], colnames=['Predicted'])
+    print(test_conf_matrix)
+    print(classification_report(y_test, y_pred))
+    print(recall_score(y_test,y_pred))
+
+    # Validation
+
+    print('-----------------------------------------------------------------')
+    print('----------------------Validation---------------------------------')
+    y_val_pred = xgbclf.predict(x_val)
+    if save_model:
+        joblib.dump(final_model, './model_checkpoints/xgb_fraud_model.pkl')
+        print('model saved')
+    val_conf_matrix = pd.crosstab(y_val, y_val_pred, rownames=['Actual'], colnames=['Predicted'])
+    print(val_conf_matrix)
+    print(classification_report(y_val, y_val_pred))
+    print(recall_score(y_val,y_val_pred))
+
+
+    # Log mlflow attributes for mlflow UI
+
+    mlflow.log_param("max_depth", xgbclf.max_depth)
+    mlflow.log_param("random_state", xgbclf.random_state)
+    mlflow.log_param("learning_rate", xgbclf.learning_rate)
+    mlflow.log_param("n_estimators", xgbclf.n_estimators)
+    mlflow.log_param("test_split_seed", test_split_seed)
+    mlflow.log_param("test_split_ratio",test_split_ratio)
+
+    test_conf_matrix = confusion_matrix(y_test, y_pred)
+    test_roc = roc_auc_score(y_test, y_pred)
+
+    # confusion matrix values
+    test_tp = test_conf_matrix[0][0]
+    test_tn = test_conf_matrix[1][1]
+    test_fp = test_conf_matrix[0][1]
+    test_fn = test_conf_matrix[1][0]
+
+    # actually FRAUD but model says its not fraud
+    mlflow.log_metric("test_false_negative", test_fn)
+    # actually NOT fraud but model says it is fraud
+    mlflow.log_metric("test_false_positive", test_fp) 
+
+    val_conf_matrix = confusion_matrix(y_val, y_val_pred)
+
+    # confusion matrix values
+    val_tp = val_conf_matrix[0][0]
+    val_tn = val_conf_matrix[1][1]
+    val_fp = val_conf_matrix[0][1]
+    val_fn = val_conf_matrix[1][0]
+
+    # actually FRAUD but model says its not fraud
+    mlflow.log_metric("val_false_negative", val_fn)
+    # actually NOT fraud but model says it is fraud
+    mlflow.log_metric("val_false_positive", val_fp) 
 
 
 
@@ -148,42 +161,3 @@ with mlflow.start_run(run_name=run_name) as run:
 
 
 
-
-
-
-
-
-    # create confusion matrix plot
-    # plt_cm, fig_cm, ax_cm = utils.plot_confusion_matrix(y_test, y_pred, y_test,
-    #                                                     title="Classification Confusion Matrix")
-
-    # temp_name = "confusion-matrix.png"
-    # fig_cm.savefig(temp_name)
-    # mlflow.log_artifact(temp_name, "confusion-matrix-plots")
-    # try:
-    #     os.remove(temp_name)
-    # except FileNotFoundError as e:
-    #     print(f"{temp_name} file is not found")
-
-    # # create roc plot
-    # plot_file = "roc-auc-plot.png"
-    # probs = y_probs[:, 1]
-    # fpr, tpr, thresholds = roc_curve(y_test, probs)
-    # plt_roc, fig_roc, ax_roc = utils.create_roc_plot(fpr, tpr)
-    # fig_roc.savefig(plot_file)
-    # mlflow.log_artifact(plot_file, "roc-auc-plots")
-    # try:
-    #     os.remove(plot_file)
-    # except FileNotFoundError as e:
-    #     print(f"{temp_name} file is not found")
-
-    # print("<->" * 40)
-    # print("Inside MLflow Run with run_id {run_id} and experiment_id {experiment_id}")
-    # print("max_depth of trees:", self.params["max_depth"])
-    # print(conf_matrix)
-    # print(classification_report(y_test, y_pred))
-    # print("Accuracy Score =>", acc)
-    # print("Precision      =>", precision)
-    # print("ROC            =>", roc)
-
-    # return experiment_id, run_id
